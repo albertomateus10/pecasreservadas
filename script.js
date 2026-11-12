@@ -122,8 +122,7 @@ let charts = {
     vendedor: null,
     origem: null,
     status: null,
-    dias: null,
-    prioridade: null
+    dias: null
 };
 
 const state = {
@@ -1361,82 +1360,6 @@ function renderCharts(rows) {
                         formatter: (v) => {
                             const pct = ((v / totalDias) * 100).toFixed(1).replace('.', ',');
                             return `${NUM(v)} reservas (${pct}%)`;
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    /* 7. Distribuição por Prioridade */
-    const statsByPri = {};
-    rows.forEach(r => {
-        const k = `Pri ${r.Prioridade || '0'}`;
-        statsByPri[k] = (statsByPri[k] || 0) + 1;
-    });
-
-    const priArr = Object.entries(statsByPri).sort((a, b) => b[1] - a[1]);
-    const totalPri = rows.length || 1;
-
-    if (charts.prioridade) charts.prioridade.destroy();
-    const priCtx = document.getElementById('prioridadeChart')?.getContext('2d');
-    if (priCtx) {
-        charts.prioridade = new Chart(priCtx, {
-            type: 'bar',
-            data: {
-                labels: priArr.map(x => x[0]),
-                datasets: [{
-                    label: 'Reservas',
-                    data: priArr.map(x => x[1]),
-                    backgroundColor: '#1e40af',
-                    borderRadius: 8,
-                    barPercentage: 0.5,
-                    categoryPercentage: 0.8
-                }]
-            },
-            options: {
-                ...commonOpts,
-                onClick: (evt, elements) => {
-                    if (!elements || !elements.length) return;
-                    const idx = elements[0].index;
-                    const label = charts.prioridade.data.labels[idx];
-                    const cleanPri = label.replace('Pri ', '');
-                    barFilter = { type: 'prioridade', label: cleanPri };
-                    tableLoaded = true;
-                    currentPage = 1;
-                    renderTableSection();
-                    document.getElementById('tableToggleBar')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                },
-                scales: {
-                    x: {
-                        grid: { display: false },
-                        ticks: { font: { size: 11, weight: '600' }, color: '#334155' }
-                    },
-                    y: {
-                        grace: '20%',
-                        grid: { color: '#f1f5f9' },
-                        ticks: { font: { size: 11 }, color: '#64748b' }
-                    }
-                },
-                plugins: {
-                    ...commonOpts.plugins,
-                    legend: { display: false },
-                    title: {
-                        display: true,
-                        text: 'Distribuição por Nível de Prioridade',
-                        font: { size: 14, weight: 'bold' },
-                        color: '#1e293b'
-                    },
-                    datalabels: {
-                        display: true,
-                        align: 'end',
-                        anchor: 'end',
-                        offset: 4,
-                        color: '#1e40af',
-                        font: { weight: 'bold', size: 11 },
-                        formatter: (v) => {
-                            const pct = ((v / totalPri) * 100).toFixed(1).replace('.', ',');
-                            return `${NUM(v)} (${pct}%)`;
                         }
                     }
                 }
