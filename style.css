@@ -810,6 +810,14 @@ td.cell-vendedor:hover, td.cell-codigo:hover {
     text-decoration: underline;
 }
 
+/* Textos longos (descrição / observações) */
+td.cell-ellipsis {
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 /* Badges */
 .badge {
     display: inline-flex;

@@ -20,6 +20,8 @@ const $ = s => document.querySelector(s);
 const NUM = v => new Intl.NumberFormat('pt-BR').format(+v || 0);
 const DEC = v => new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(+v || 0);
 const PCT = v => (Number.isFinite(v) ? v.toFixed(1).replace('.', ',') : '—') + '%';
+const BRL = v => (+v ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(+v) : '—');
+const escAttr = s => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /* ===== Scroll estável ===== */
 function withStableScroll(fn) {
@@ -330,6 +332,133 @@ async function readFile(file) {
     }
 }
 
+/* =====================================================================
+ * LEITURA DA PLANILHA — MAPEAMENTO DE COLUNAS PELO CABEÇALHO
+ * ---------------------------------------------------------------------
+ * A extração da base tem o seguinte layout:
+ *   Linha 1 → título do relatório
+ *   Linha 2 → "Data de Geração: ..."
+ *   Linha 3 → CABEÇALHO (nomes das colunas)
+ *   Linha 4 em diante → dados
+ *
+ * Cada campo é localizado pelo NOME do cabeçalho da linha 3, e não pela
+ * posição. Se uma coluna mudar de lugar na extração, a leitura continua
+ * correta. A letra em `fallback` (layout padrão da extração) só é usada
+ * quando o cabeçalho não é encontrado.
+ * ===================================================================== */
+const HEADER_ROW = 3; // linha do cabeçalho, numerada como no Excel (1 = primeira linha)
+
+const COLUMN_MAP = {
+    NumReserva:  { label: 'Número da Reserva', fallback: 'A',  aliases: ['Nº Res.', 'N Res', 'Nro Res', 'Num Res', 'Numero Res', 'Numero Reserva', 'Número da Reserva', 'Nº Reserva'] },
+    Origem:      { label: 'Origem da Reserva', fallback: 'B',  aliases: ['Origem da Reserva', 'Origem'] },
+    Prioridade:  { label: 'Prioridade',        fallback: 'C',  aliases: ['Pri', 'Prioridade'] },
+    Liberacao:   { label: 'Liberação',         fallback: 'D',  aliases: ['Lib->', 'Lib', 'Liberação', 'Liberado'] },
+    StatusOS:    { label: 'Status OS/Orç',     fallback: 'F',  aliases: ['OS/Orç Ofi', 'OS Orc Ofi', 'OS/Orç', 'Status OS'] },
+    DocRef:      { label: 'Doc. Referência',   fallback: 'G',  aliases: ['Doc.Ref', 'Doc Ref', 'Documento Referencia'] },
+    Codigo:      { label: 'Código da Peça',    fallback: 'H',  aliases: ['Código', 'Código da Peça', 'Cod Peca', 'Cod. Peça'] },
+    Qtde:        { label: 'Quantidade',        fallback: 'I',  aliases: ['Qtde.', 'Qtde', 'Qtd', 'Quantidade'] },
+    Cliente:     { label: 'Nome do Cliente',   fallback: 'L',  aliases: ['Cliente', 'Nome do Cliente', 'Nome Cliente', 'Cliente Nome'] },
+    Telefone:    { label: 'Telefone',          fallback: 'M',  aliases: ['Telefone', 'Fone'] },
+    Chassi:      { label: 'Chassi',            fallback: 'U',  aliases: ['CHASSI', 'Chassis'] },
+    Placa:       { label: 'Placa',             fallback: 'V',  aliases: ['PLACA'] },
+    Consultor:   { label: 'Consultor',         fallback: 'BD', aliases: ['VENDEDOR_NOME', 'Vendedor', 'Nome Vendedor', 'Consultor'] },
+    DataReserva: { label: 'Data da Reserva',   fallback: 'AK', aliases: ['DATA_RESERVA', 'Data da Reserva', 'Data Reserva'] },
+    Descricao:   { label: 'Descrição da Peça', fallback: 'AM', aliases: ['Descrição', 'Descrição da Peça', 'Descricao Peca', 'Desc. Peça'] },
+    // "Dias" (col. E) vem zerada na extração; os dias reais estão em "dias_reservado"
+    Dias:        { label: 'Dias Reservado',    fallback: 'AO', aliases: ['dias_reservado', 'Dias Reservado', 'Dias Reserva', 'Dias'] },
+    Observacao:  { label: 'Observações',       fallback: 'AU', aliases: ['OBSERVACAO', 'Observação', 'Observações', 'Obs'] },
+    Preco:       { label: 'Preço',             fallback: 'AV', aliases: ['PRECO_UNITARIO', 'Preço Unitário', 'Preço', 'Valor Unitário'] },
+    TipoReserva: { label: 'Tipo de Reserva',   fallback: 'BB', aliases: ['TIPO_RESERVA', 'Tipo Reserva'] }
+};
+
+/* Normaliza textos de cabeçalho: minúsculas, sem acentos, sem pontuação.
+ * Ex.: "Nº Res." → "no res" | "OS/Orç Ofi" → "os orc ofi" | "DATA_RESERVA" → "data reserva" */
+function normalizeHeader(s) {
+    return String(s ?? '')
+        .normalize('NFKD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+}
+
+/* Variações de "Nº" (no / n / nro / num) são tratadas como equivalentes */
+function headerKey(s) {
+    return normalizeHeader(s).replace(/^(no|n|nro|num|numero)\b/, 'n');
+}
+
+/**
+ * Resolve o índice (0-based, A = 0) de cada campo a partir do cabeçalho.
+ *  1ª passada: nome exato (após normalização), respeitando a ordem dos aliases;
+ *  2ª passada: nome parcial (palavra inteira) para os campos não resolvidos;
+ *  3ª passada: letra padrão do layout (fallback), se a coluna estiver livre.
+ * Uma mesma coluna nunca é atribuída a dois campos.
+ */
+function resolveColumns(headerRow) {
+    const headers = (headerRow || []).map(headerKey);
+    const used = new Set();
+    const idx = {};
+    const origem = {}; // 'cabecalho' | 'fallback' | 'ausente'
+
+    const fields = Object.keys(COLUMN_MAP);
+
+    // 1) Correspondência exata
+    for (const f of fields) {
+        for (const alias of COLUMN_MAP[f].aliases) {
+            const a = headerKey(alias);
+            const i = headers.findIndex((h, j) => h && h === a && !used.has(j));
+            if (i >= 0) { idx[f] = i; used.add(i); origem[f] = 'cabecalho'; break; }
+        }
+    }
+
+    // 2) Correspondência parcial por palavra inteira
+    for (const f of fields) {
+        if (idx[f] !== undefined) continue;
+        for (const alias of COLUMN_MAP[f].aliases) {
+            const a = headerKey(alias);
+            if (a.length < 3) continue;
+            const i = headers.findIndex((h, j) => h && !used.has(j) && (` ${h} `).includes(` ${a} `));
+            if (i >= 0) { idx[f] = i; used.add(i); origem[f] = 'cabecalho'; break; }
+        }
+    }
+
+    // 3) Fallback pela letra padrão da extração
+    for (const f of fields) {
+        if (idx[f] !== undefined) continue;
+        const i = XLSX.utils.decode_col(COLUMN_MAP[f].fallback);
+        if (!used.has(i) && !headers[i]) {
+            idx[f] = i; used.add(i); origem[f] = 'fallback';
+        } else {
+            idx[f] = -1; origem[f] = 'ausente';
+        }
+    }
+
+    return { idx, origem };
+}
+
+/* Quantos campos conhecidos uma linha contém (usado para validar o cabeçalho) */
+function countKnownHeaders(row) {
+    const keys = new Set((row || []).map(headerKey).filter(Boolean));
+    let n = 0;
+    for (const f of Object.keys(COLUMN_MAP)) {
+        if (COLUMN_MAP[f].aliases.some(a => keys.has(headerKey(a)))) n++;
+    }
+    return n;
+}
+
+/* Usa a linha 3; se ela não parecer um cabeçalho, procura nas 15 primeiras linhas */
+function detectHeaderRow(mat) {
+    const preferred = HEADER_ROW - 1;
+    if (countKnownHeaders(mat[preferred]) >= 3) return preferred;
+
+    let bestIdx = preferred, best = 0;
+    for (let i = 0; i < Math.min(15, mat.length); i++) {
+        const n = countKnownHeaders(mat[i]);
+        if (n > best) { best = n; bestIdx = i; }
+    }
+    return bestIdx;
+}
+
 function processWorkbook(wb) {
     const name = wb.SheetNames.find(n => {
         const ws = wb.Sheets[n];
@@ -338,106 +467,108 @@ function processWorkbook(wb) {
     }) || wb.SheetNames[0];
 
     const ws = wb.Sheets[name];
-    if (!ws) { showError('A planilha selecionada está vazia.'); return; }
+    if (!ws || !ws['!ref']) { showError('A planilha selecionada está vazia.'); return; }
 
-    const mat = XLSX.utils.sheet_to_json(ws, { header: 1, blankrows: false });
+    // Lê sempre a partir de A1, para que o índice da matriz corresponda
+    // exatamente à linha/coluna do Excel (mat[2] = linha 3, coluna 0 = A).
+    const full = XLSX.utils.decode_range(ws['!ref']);
+    const mat = XLSX.utils.sheet_to_json(ws, {
+        header: 1,
+        blankrows: true,
+        defval: '',
+        raw: true,
+        range: { s: { r: 0, c: 0 }, e: full.e }
+    });
     if (!mat || !mat.length) { showError('Nenhuma linha de dados encontrada na planilha.'); return; }
 
-    let headerIdx = detectHeaderRow(mat);
-    const headers = (mat[headerIdx] || []).map(x => String(x || '').trim());
-    const dataRows = mat.slice(headerIdx + 1);
+    const headerIdx = detectHeaderRow(mat);
+    const { idx, origem } = resolveColumns(mat[headerIdx]);
 
-    parseRows(headers, dataRows);
-}
+    // Linhas de dados: tudo abaixo do cabeçalho, ignorando linhas totalmente vazias
+    const dataRows = mat.slice(headerIdx + 1)
+        .filter(r => Array.isArray(r) && r.some(c => String(c ?? '').trim() !== ''));
 
-function detectHeaderRow(mat) {
-    let best = 0, bestIdx = 0;
-    const maxCheck = Math.min(10, mat.length);
-    for (let i = 0; i < maxCheck; i++) {
-        const row = mat[i] || [];
-        const filled = row.filter(c => c !== undefined && c !== null && String(c).trim() !== '').length;
-        const hasKeywords = row.some(c => {
-            const s = String(c || '').toLowerCase();
-            return s.includes('res') || s.includes('origem') || s.includes('código') || s.includes('codigo')
-                || s.includes('vendedor') || s.includes('vendedor_nome') || s.includes('data_reserva')
-                || s.includes('tipo_reserva') || s.includes('observacao');
-        });
-        if (hasKeywords || filled > best) {
-            best = filled;
-            bestIdx = i;
-            if (hasKeywords) break;
-        }
+    logColumnMapping(mat[headerIdx], idx, origem, headerIdx);
+
+    const naoEncontrados = Object.keys(origem).filter(f => origem[f] !== 'cabecalho').map(f => COLUMN_MAP[f].label);
+    if (naoEncontrados.length) {
+        showWarn(`Colunas não localizadas pelo cabeçalho da linha ${headerIdx + 1}: ${naoEncontrados.join(', ')}. Foi usada a posição padrão da extração (quando disponível).`);
     }
-    return bestIdx;
+
+    parseRows(idx, dataRows);
 }
 
-function findCol(headers, aliases) {
-    const lc = headers.map(h => String(h || '').toLowerCase().trim());
-    for (const a of aliases) {
-        const idx = lc.findIndex(h => h.includes(a.toLowerCase()));
-        if (idx >= 0) return idx;
+/* Exibe no console (F12) qual coluna do Excel foi usada para cada campo */
+function logColumnMapping(headerRow, idx, origem, headerIdx) {
+    if (!console || !console.table) return;
+    const tbl = {};
+    for (const f of Object.keys(COLUMN_MAP)) {
+        const i = idx[f];
+        tbl[COLUMN_MAP[f].label] = {
+            Coluna: i >= 0 ? XLSX.utils.encode_col(i) : '—',
+            Cabecalho: i >= 0 ? String((headerRow || [])[i] ?? '') : '—',
+            Origem: origem[f]
+        };
     }
-    return -1;
+    console.info(`[Reservas] Cabeçalho lido na linha ${headerIdx + 1}. Mapeamento de colunas:`);
+    console.table(tbl);
 }
 
-function parseRows(headers, data) {
-    // Mapeamento fixo de colunas da planilha reservas (0-based):
-    // Col A(0): Nº Reserva  | Col B(1): Origem       | Col C(2): Pri     | Col D(3): Lib
-    // Col E(4): Dias        | Col F(5): OS/Orc Ofi   | Col G(6): Doc.Ref | Col H(7): Código
-    // Col I(8): Qtde        | Col J(9): Cliente       | Col K(10): Data Reserva
-    // Col L(11): Observação | Col M(12): Vendedor
-    const idx = {
-        numRes:   findCol(headers, ['nº res', 'n° res', 'n res', 'res.']),
-        origem:   findCol(headers, ['origem da reserva', 'origem']),
-        pri:      findCol(headers, ['pri', 'prioridade']),
-        lib:      findCol(headers, ['lib->', 'lib', 'liberação', 'liberacao']),
-        dias:     findCol(headers, ['dias']),
-        statusOS: findCol(headers, ['os/orc ofi', 'os/orc', 'status', 'oficina']),
-        docRef:   findCol(headers, ['doc.ref', 'doc ref', 'referencia']),
-        codigo:   findCol(headers, ['código', 'codigo', 'cod']),
-        qtde:     findCol(headers, ['qtde', 'qtd', 'quantidade']),
-        cliente:  findCol(headers, ['cliente', 'nome cliente']),
-        telefone: findCol(headers, ['telefone', 'fone', 'tel']),
-        dataRes:  findCol(headers, ['data_reserva', 'data reserva', 'data']),
-        obs:      findCol(headers, ['observacao', 'observação', 'obs']),
-        tipoRes:  findCol(headers, ['tipo_reserva', 'tipo reserva', 'tipo']),
-        vendedor: findCol(headers, ['vendedor_nome', 'vendedor', 'nome vendedor'])
-    };
+function parseRows(idx, data) {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
 
     allData = data.map(r => {
-        const get = (i) => (i >= 0 && r[i] !== undefined && r[i] !== null) ? String(r[i]).trim() : '';
+        const raw = (f) => (idx[f] >= 0 && r[idx[f]] !== undefined && r[idx[f]] !== null) ? r[idx[f]] : '';
+        const txt = (f, vazio = '—') => {
+            const s = String(raw(f)).trim();
+            return s || vazio;
+        };
 
-        // Leitura por posição fixa (fallback quando cabeçalho não detectado):
-        // K=10: Data Reserva | L=11: Observação | J=9: Cliente | M=12: Vendedor
-        // H=7: Código        | A=0: Nº Reserva  | E=4: Dias    | I=8: Qtde
-        const dataRaw = (idx.dataRes >= 0 && r[idx.dataRes] !== undefined)
-            ? r[idx.dataRes]
-            : (r[10] !== undefined ? r[10] : '');
-        const mesAno = monthYearFromCell(dataRaw);
-        const diasNum = toNumberBR((idx.dias >= 0 && r[idx.dias] !== undefined) ? r[idx.dias] : (r[4] ?? 0));
-        const origemNorm = normalizeOrigem(get(idx.origem) || String(r[1] || ''));
-        const libNorm = normalizeLiberacao(get(idx.lib) || String(r[3] || ''));
+        // Data da reserva
+        const dataRaw = raw('DataReserva');
+        const dataObj = (dataRaw === '' ? null : parseDateExcel(dataRaw));
+        const dataTxt = typeof dataRaw === 'number'
+            ? (dataObj ? dataObj.toLocaleDateString('pt-BR') : '—')
+            : (String(dataRaw).trim() || '—');
 
-        // Fallbacks com índices corretos da planilha reservas
+        // Dias em reserva: usa a coluna; se não existir, calcula pela data da reserva
+        let diasNum = toNumberBR(raw('Dias'));
+        if (idx.Dias < 0 && dataObj && !isNaN(+dataObj)) {
+            const d0 = new Date(dataObj); d0.setHours(0, 0, 0, 0);
+            diasNum = Math.max(0, Math.round((hoje - d0) / 86400000));
+        }
+
+        const libRaw = txt('Liberacao', '');
+        const qtde = toNumberBR(raw('Qtde')) || 1;
+        const preco = toNumberBR(raw('Preco'));
+        const consultor = txt('Consultor', 'Não informado');
+
         return {
-            NumReserva:   get(idx.numRes)   || String(r[0]  || '—'),
-            Origem:       origemNorm,
-            Prioridade:   get(idx.pri)      || String(r[2]  ?? '0'),
-            Liberacao:    libNorm,
-            LiberacaoRaw: get(idx.lib)      || String(r[3]  || '—'),
+            NumReserva:   txt('NumReserva'),
+            Origem:       normalizeOrigem(txt('Origem', '')),
+            Prioridade:   txt('Prioridade', '0'),
+            Liberacao:    normalizeLiberacao(libRaw),
+            LiberacaoRaw: libRaw || '—',
             Dias:         diasNum,
             FaixaDias:    mapFaixaDias(diasNum),
-            StatusOS:     get(idx.statusOS) || (r[5]  ? String(r[5]).trim()  : '—') || '—',
-            DocRef:       get(idx.docRef)   || (r[6]  ? String(r[6]).trim()  : '—') || '—',
-            Codigo:       get(idx.codigo)   || String(r[7]  || '—'),
-            Qtde:         toNumberBR(idx.qtde >= 0 ? r[idx.qtde] : r[8]) || 1,
-            Cliente:      get(idx.cliente)  || (r[9]  ? String(r[9]).trim()  : 'Não informado') || 'Não informado',
-            Telefone:     get(idx.telefone) || '—',
-            DataReserva:  typeof dataRaw === 'number' ? parseDateExcel(dataRaw).toLocaleDateString('pt-BR') : String(dataRaw || '—'),
-            MesAno:       mesAno,
-            Observacao:   get(idx.obs)      || (r[11] ? String(r[11]).trim() : '—') || '—',
-            TipoReserva:  get(idx.tipoRes)  || '—',
-            Vendedor:     get(idx.vendedor) || (r[12] ? String(r[12]).trim() : 'Não informado') || 'Não informado'
+            StatusOS:     txt('StatusOS'),
+            DocRef:       txt('DocRef'),
+            Codigo:       txt('Codigo'),
+            Descricao:    txt('Descricao'),
+            Qtde:         qtde,
+            Preco:        preco,
+            ValorTotal:   preco * qtde,
+            Cliente:      txt('Cliente', 'Não informado'),
+            Telefone:     txt('Telefone'),
+            Chassi:       txt('Chassi'),
+            Placa:        txt('Placa'),
+            Consultor:    consultor,
+            DataReserva:  dataTxt,
+            MesAno:       monthYearFromCell(dataRaw),
+            Observacao:   txt('Observacao'),
+            TipoReserva:  txt('TipoReserva'),
+            Vendedor:     consultor
         };
     });
 
@@ -523,12 +654,17 @@ function applyFilters() {
         const qOk = !q || [
             r.NumReserva,
             r.Codigo,
+            r.Descricao,
             r.Cliente,
             r.Vendedor,
+            r.Consultor,
+            r.Chassi,
+            r.Placa,
             r.Origem,
             r.StatusOS,
             r.DocRef,
-            r.Telefone
+            r.Telefone,
+            r.Observacao
         ].some(val => (val || '').toString().toLowerCase().includes(q));
 
         return mesOk && origemOk && vendOk && codOk && priOk && libOk && statusOk && diasOk && qOk;
@@ -1399,11 +1535,15 @@ function renderTable(rows) {
             <td><strong>#${r.NumReserva}</strong></td>
             <td>${r.DataReserva || '—'}</td>
             <td>${r.Cliente || '—'}</td>
-            <td class="cell-vendedor" title="Filtrar por este vendedor">${r.Vendedor || '—'}</td>
+            <td class="cell-vendedor" title="Filtrar por este consultor">${r.Consultor || r.Vendedor || '—'}</td>
             <td class="cell-codigo" title="Filtrar por esta peça">${r.Codigo}</td>
+            <td class="cell-ellipsis" title="${escAttr(r.Descricao)}">${r.Descricao || '—'}</td>
             <td><strong>${NUM(r.Qtde)}</strong></td>
-            <td>${DEC(r.Dias)}</td>
-            <td title="${r.Observacao || ''}">${r.Observacao || '—'}</td>
+            <td>${BRL(r.Preco)}</td>
+            <td>${r.Placa || '—'}</td>
+            <td>${r.Chassi || '—'}</td>
+            <td>${NUM(r.Dias)}</td>
+            <td class="cell-ellipsis" title="${escAttr(r.Observacao)}">${r.Observacao || '—'}</td>
             <td><span class="badge badge-origem">${r.Origem}</span></td>
             <td><span class="badge badge-pri">Pri ${r.Prioridade}</span></td>
             <td>${libBadge}</td>
@@ -1509,13 +1649,13 @@ document.querySelector('#grid tbody')?.addEventListener('click', (e) => {
 });
 
 /* ===== Inicialização com Dados Pré-Carregados ===== */
-// Campos conforme linha 1 da planilha reservas:
-// NumReserva | Origem | Prioridade | Liberacao | Dias | StatusOS | DocRef | Codigo
-// Qtde | Cliente | Telefone | DataReserva | Observacao | TipoReserva | Vendedor
+// Campos dos registros: ver COLUMN_MAP (leitura pelo cabeçalho da linha 3)
 (function init() {
     if (typeof INITIAL_DATA !== 'undefined' && Array.isArray(INITIAL_DATA) && INITIAL_DATA.length > 0) {
         allData = INITIAL_DATA.map(r => ({
             ...r,
+            Consultor:    r.Consultor || r.Vendedor || 'Não informado',
+            Vendedor:     r.Vendedor || r.Consultor || 'Não informado',
             MesAno:       monthYearFromCell(r.DataReserva),
             FaixaDias:    mapFaixaDias(r.Dias),
             LiberacaoRaw: r.Liberacao,

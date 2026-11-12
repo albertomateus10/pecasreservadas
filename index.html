@@ -23,7 +23,7 @@
 
         <div class="controls-wrap">
             <div class="search-box">
-                <input id="q" class="search-input" placeholder="Buscar por nº reserva, código, cliente ou vendedor" />
+                <input id="q" class="search-input" placeholder="Buscar por nº reserva, código, descrição, cliente, placa, chassi, consultor ou vendedor" />
                 <div class="file-input">
                     <button class="file-btn"><i class="fa-solid fa-file-excel"></i> Selecionar arquivo</button>
                     <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
@@ -82,11 +82,15 @@
                             <th class="sortable" data-key="NumReserva" data-type="text">Nº Reserva <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="DataReserva" data-type="text">Data da Reserva <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Cliente" data-type="text">Cliente <i class="fa-solid fa-sort sort"></i></th>
-                            <th class="sortable" data-key="Vendedor" data-type="text">Vendedor <i class="fa-solid fa-sort sort"></i></th>
+                            <th class="sortable" data-key="Consultor" data-type="text">Consultor <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Codigo" data-type="text">Código da Peça <i class="fa-solid fa-sort sort"></i></th>
+                            <th class="sortable" data-key="Descricao" data-type="text">Descrição da Peça <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Qtde" data-type="num">Qtde <i class="fa-solid fa-sort sort"></i></th>
+                            <th class="sortable" data-key="Preco" data-type="num">Preço <i class="fa-solid fa-sort sort"></i></th>
+                            <th class="sortable" data-key="Placa" data-type="text">Placa <i class="fa-solid fa-sort sort"></i></th>
+                            <th class="sortable" data-key="Chassi" data-type="text">Chassi <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Dias" data-type="num">Dias <i class="fa-solid fa-sort sort"></i></th>
-                            <th class="sortable" data-key="Observacao" data-type="text">Observação <i class="fa-solid fa-sort sort"></i></th>
+                            <th class="sortable" data-key="Observacao" data-type="text">Observações <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Origem" data-type="text">Origem <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Prioridade" data-type="num">Prioridade <i class="fa-solid fa-sort sort"></i></th>
                             <th>Liberação</th>
