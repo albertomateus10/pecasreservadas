@@ -708,6 +708,28 @@ body {
     box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35);
 }
 
+.export-btn {
+    border: 0;
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    color: #fff;
+    padding: 9px 16px;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+
+.export-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px rgba(22, 163, 74, 0.35);
+}
+
 .clear-bar-btn {
     border: 1px solid #fca5a5;
     background: #fef2f2;

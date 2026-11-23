@@ -1540,6 +1540,96 @@ document.getElementById('clearBarFilterBtn')?.addEventListener('click', (e) => {
     renderTableSection();
 });
 
+function exportToExcel() {
+    if (!window.XLSX) {
+        showError('Biblioteca XLSX não carregada. Verifique sua conexão com a internet.');
+        return;
+    }
+
+    const baseRows = barFilter ? filterByBar(filtered, barFilter) : filtered;
+    const rowsToExport = sortRows([...baseRows]);
+
+    if (!rowsToExport.length) {
+        showWarn('Não há reservas para exportar com os filtros atuais.');
+        return;
+    }
+
+    const headers = [
+        'Nº Reserva',
+        'Data da Reserva',
+        'Cliente',
+        'Consultor',
+        'Código da Peça',
+        'Descrição da Peça',
+        'Qtde',
+        'Preço Unitário',
+        'Valor Total',
+        'Dias',
+        'Observações',
+        'Origem',
+        'Prioridade',
+        'Liberação',
+        'Status OS'
+    ];
+
+    const aoa = [headers];
+    for (const r of rowsToExport) {
+        const qtde = Number(r.Qtde) || 0;
+        const preco = Number(r.Preco) || 0;
+        const total = Number(r.ValorTotal) || (preco * qtde);
+        const dias = Number(r.Dias) || 0;
+
+        aoa.push([
+            r.NumReserva || '',
+            r.DataReserva || '',
+            r.Cliente || '',
+            r.Consultor || r.Vendedor || '',
+            r.Codigo || '',
+            r.Descricao || '',
+            qtde,
+            preco,
+            total,
+            dias,
+            r.Observacao === '—' ? '' : (r.Observacao || ''),
+            r.Origem || '',
+            r.Prioridade || '',
+            r.Liberacao || '',
+            r.StatusOS === '—' ? '' : (r.StatusOS || '')
+        ]);
+    }
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Formata colunas monetárias e ajusta largura automática das colunas
+    const colWidths = headers.map((h, cIdx) => {
+        let maxLen = h.length;
+        for (let rIdx = 1; rIdx < aoa.length; rIdx++) {
+            const val = aoa[rIdx][cIdx];
+            const len = String(val ?? '').length;
+            if (len > maxLen) maxLen = len;
+            if ((cIdx === 7 || cIdx === 8) && typeof val === 'number') {
+                const ref = XLSX.utils.encode_cell({ r: rIdx, c: cIdx });
+                if (ws[ref]) ws[ref].z = 'R$ #,##0.00';
+            }
+        }
+        return { wch: Math.min(Math.max(maxLen + 3, 10), 45) };
+    });
+    ws['!cols'] = colWidths;
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Reservas');
+
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const fileName = `reservas_pecas_${pad(now.getDate())}-${pad(now.getMonth() + 1)}-${now.getFullYear()}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+}
+
+document.getElementById('exportExcelBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    exportToExcel();
+});
+
 /* Filtro rápido ao clicar na tabela */
 document.querySelector('#grid tbody')?.addEventListener('click', (e) => {
     const cellVend = e.target.closest('.cell-vendedor');
