@@ -23,7 +23,10 @@
 
         <div class="controls-wrap">
             <div class="search-box">
-                <input id="q" class="search-input" placeholder="Buscar por nº reserva, código, descrição, cliente, placa, chassi, consultor ou vendedor" />
+                <div class="search-input-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input id="q" class="search-input" placeholder="Buscar por nº reserva, código, descrição, cliente, consultor ou vendedor" />
+                </div>
                 <div class="file-input">
                     <button class="file-btn"><i class="fa-solid fa-file-excel"></i> Selecionar arquivo</button>
                     <input id="fileInput" type="file" accept=".xlsx,.xls,.csv" />
@@ -86,8 +89,6 @@
                             <th class="sortable" data-key="Descricao" data-type="text">Descrição da Peça <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Qtde" data-type="num">Qtde <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Preco" data-type="num">Preço <i class="fa-solid fa-sort sort"></i></th>
-                            <th class="sortable" data-key="Placa" data-type="text">Placa <i class="fa-solid fa-sort sort"></i></th>
-                            <th class="sortable" data-key="Chassi" data-type="text">Chassi <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Dias" data-type="num">Dias <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Observacao" data-type="text">Observações <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Origem" data-type="text">Origem <i class="fa-solid fa-sort sort"></i></th>

@@ -1463,8 +1463,6 @@ function renderTable(rows) {
             <td class="cell-ellipsis" title="${escAttr(r.Descricao)}">${r.Descricao || '—'}</td>
             <td><strong>${NUM(r.Qtde)}</strong></td>
             <td>${BRL(r.Preco)}</td>
-            <td>${r.Placa || '—'}</td>
-            <td>${r.Chassi || '—'}</td>
             <td>${NUM(r.Dias)}</td>
             <td class="cell-ellipsis" title="${escAttr(r.Observacao)}">${r.Observacao || '—'}</td>
             <td><span class="badge badge-origem">${r.Origem}</span></td>
