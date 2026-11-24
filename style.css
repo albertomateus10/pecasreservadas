@@ -273,6 +273,18 @@ body {
     border-color: #fca5a5;
 }
 
+.controls-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.controls-actions .export-btn {
+    padding: 10px 16px;
+    border-radius: 12px;
+}
+
 /* ===== Filtros (Pills Multi-Select) ===== */
 .filters {
     display: flex;
@@ -836,13 +848,13 @@ tr:hover td {
 }
 
 /* Células interativas */
-td.cell-vendedor, td.cell-codigo {
+td.cell-vendedor, td.cell-codigo, td.cell-docref {
     cursor: pointer;
     color: var(--primary);
     font-weight: 600;
 }
 
-td.cell-vendedor:hover, td.cell-codigo:hover {
+td.cell-vendedor:hover, td.cell-codigo:hover, td.cell-docref:hover {
     text-decoration: underline;
 }
 

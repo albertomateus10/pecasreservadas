@@ -134,6 +134,7 @@ const state = {
     Prioridade: [],
     Liberacao: [],
     StatusOS: [],
+    DocRef: [],
     FaixaDias: []
 };
 
@@ -281,13 +282,14 @@ const pillInstances = {
     Prioridade: new MultiPill({ label: 'Prioridade', getter: () => state.Prioridade, setter: v => state.Prioridade = v }),
     Liberacao: new MultiPill({ label: 'Liberação', getter: () => state.Liberacao, setter: v => state.Liberacao = v }),
     StatusOS: new MultiPill({ label: 'Status OS/Orç', getter: () => state.StatusOS, setter: v => state.StatusOS = v }),
+    DocRef: new MultiPill({ label: 'Nº OS / Orçamento', getter: () => state.DocRef, setter: v => state.DocRef = v }),
     FaixaDias: new MultiPill({ label: 'Faixa de Dias', getter: () => state.FaixaDias, setter: v => state.FaixaDias = v }),
 };
 
 (function mountPills() {
     const holder = document.getElementById('filters');
     if (!holder) return;
-    ['Mes', 'Origem', 'Vendedor', 'Codigo', 'Prioridade', 'Liberacao', 'StatusOS', 'FaixaDias'].forEach(k => {
+    ['Mes', 'Origem', 'Vendedor', 'Codigo', 'Prioridade', 'Liberacao', 'StatusOS', 'DocRef', 'FaixaDias'].forEach(k => {
         holder.appendChild(pillInstances[k].el);
     });
 })();
@@ -353,7 +355,7 @@ const COLUMN_MAP = {
     Prioridade:  { label: 'Prioridade',        fallback: 'C',  aliases: ['Pri', 'Prioridade'] },
     Liberacao:   { label: 'Liberação',         fallback: 'D',  aliases: ['Lib->', 'Lib', 'Liberação', 'Liberado'] },
     StatusOS:    { label: 'Status OS/Orç',     fallback: 'F',  aliases: ['OS/Orç Ofi', 'OS Orc Ofi', 'OS/Orç', 'Status OS'] },
-    DocRef:      { label: 'Doc. Referência',   fallback: 'G',  aliases: ['Doc.Ref', 'Doc Ref', 'Documento Referencia'] },
+    DocRef:      { label: 'Nº OS / Orçamento', fallback: 'G',  aliases: ['Doc.Ref', 'Doc Ref', 'Documento Referencia', 'Nº OS/Orçamento', 'OS/Orçamento', 'Num OS'] },
     Codigo:      { label: 'Código da Peça',    fallback: 'H',  aliases: ['Código', 'Código da Peça', 'Cod Peca', 'Cod. Peça'] },
     Qtde:        { label: 'Quantidade',        fallback: 'I',  aliases: ['Qtde.', 'Qtde', 'Qtd', 'Quantidade'] },
     Cliente:     { label: 'Nome do Cliente',   fallback: 'L',  aliases: ['Cliente', 'Nome do Cliente', 'Nome Cliente', 'Cliente Nome'] },
@@ -594,6 +596,7 @@ function populateFilterOptions() {
     pillInstances.Prioridade.setOptions(allData.map(x => x.Prioridade));
     pillInstances.Liberacao.setOptions(['Liberada', 'Não Liberada', 'Pendente / Não Informado'], { keepOrder: true });
     pillInstances.StatusOS.setOptions(allData.map(x => x.StatusOS).filter(s => s && s !== '—'));
+    pillInstances.DocRef.setOptions(allData.map(x => x.DocRef).filter(d => d && d !== '—'));
     pillInstances.FaixaDias.setOptions([
         'de 0 a 30 dias',
         'de 31 a 90 dias',
@@ -625,6 +628,7 @@ if (clearAllBtn) {
             state.Prioridade = [];
             state.Liberacao = [];
             state.StatusOS = [];
+            state.DocRef = [];
             state.FaixaDias = [];
             barFilter = null;
             Object.values(pillInstances).forEach(p => {
@@ -647,6 +651,7 @@ function applyFilters() {
         const priOk = state.Prioridade.length === 0 || state.Prioridade.includes(r.Prioridade);
         const libOk = state.Liberacao.length === 0 || state.Liberacao.includes(r.Liberacao);
         const statusOk = state.StatusOS.length === 0 || state.StatusOS.includes(r.StatusOS);
+        const docRefOk = state.DocRef.length === 0 || state.DocRef.includes(r.DocRef);
         const diasOk = state.FaixaDias.length === 0 || state.FaixaDias.includes(r.FaixaDias);
 
         const q = state.search;
@@ -666,7 +671,7 @@ function applyFilters() {
             r.Observacao
         ].some(val => (val || '').toString().toLowerCase().includes(q));
 
-        return mesOk && origemOk && vendOk && codOk && priOk && libOk && statusOk && diasOk && qOk;
+        return mesOk && origemOk && vendOk && codOk && priOk && libOk && statusOk && docRefOk && diasOk && qOk;
     });
 
     currentPage = 1;
@@ -839,6 +844,10 @@ function calcKPIs(rows) {
     const diasVals = rows.map(r => +r.Dias || 0).filter(d => d > 0);
     const diasMedios = diasVals.length ? diasVals.reduce((a, b) => a + b, 0) / diasVals.length : 0;
 
+    // Nº OS / Orçamentos (Doc.Ref)
+    const docRefsSet = new Set(rows.map(r => (r.DocRef || '').trim()).filter(d => d && d !== '—'));
+    const comDocRef = rows.filter(r => r.DocRef && r.DocRef !== '—').length;
+
     return {
         totalReservas,
         totalPecas,
@@ -847,7 +856,9 @@ function calcKPIs(rows) {
         vendedorLider: topVend ? `${topVend[0]} (${NUM(topVend[1])} un.)` : '—',
         naoLiberadas,
         pendentes,
-        diasMedios
+        diasMedios,
+        totalDocRefs: docRefsSet.size,
+        comDocRef
     };
 }
 
@@ -862,6 +873,10 @@ function renderKpiGroups() {
                 <div class="kpi">
                     <div class="lab">Total de Reservas</div>
                     <div class="val">${NUM(k.totalReservas)}</div>
+                </div>
+                <div class="kpi">
+                    <div class="lab">Nº OS / Orçamentos</div>
+                    <div class="val">${NUM(k.totalDocRefs)} <span style="font-size: 0.9rem; color: #64748b; font-weight: 600;">(${NUM(k.comDocRef)} res.)</span></div>
                 </div>
                 <div class="kpi">
                     <div class="lab">Total Peças Reservadas</div>
@@ -1456,6 +1471,7 @@ function renderTable(rows) {
 
         tr.innerHTML = `
             <td><strong>#${r.NumReserva}</strong></td>
+            <td class="cell-docref" title="Filtrar por esta OS/Orçamento">${r.DocRef || '—'}</td>
             <td>${r.DataReserva || '—'}</td>
             <td>${r.Cliente || '—'}</td>
             <td class="cell-vendedor" title="Filtrar por este consultor">${r.Consultor || r.Vendedor || '—'}</td>
@@ -1556,6 +1572,7 @@ function exportToExcel() {
 
     const headers = [
         'Nº Reserva',
+        'Nº OS / Orçamento',
         'Data da Reserva',
         'Cliente',
         'Consultor',
@@ -1581,6 +1598,7 @@ function exportToExcel() {
 
         aoa.push([
             r.NumReserva || '',
+            r.DocRef === '—' ? '' : (r.DocRef || ''),
             r.DataReserva || '',
             r.Cliente || '',
             r.Consultor || r.Vendedor || '',
@@ -1607,7 +1625,7 @@ function exportToExcel() {
             const val = aoa[rIdx][cIdx];
             const len = String(val ?? '').length;
             if (len > maxLen) maxLen = len;
-            if ((cIdx === 7 || cIdx === 8) && typeof val === 'number') {
+            if ((cIdx === 8 || cIdx === 9) && typeof val === 'number') {
                 const ref = XLSX.utils.encode_cell({ r: rIdx, c: cIdx });
                 if (ws[ref]) ws[ref].z = 'R$ #,##0.00';
             }
@@ -1625,9 +1643,11 @@ function exportToExcel() {
     XLSX.writeFile(wb, fileName);
 }
 
-document.getElementById('exportExcelBtn')?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    exportToExcel();
+['exportExcelBtn', 'exportExcelTopBtn'].forEach(id => {
+    document.getElementById(id)?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportToExcel();
+    });
 });
 
 /* Filtro rápido ao clicar na tabela */
@@ -1653,6 +1673,19 @@ document.querySelector('#grid tbody')?.addEventListener('click', (e) => {
             if (set.has(cod)) set.delete(cod); else set.add(cod);
             state.Codigo = [...set];
             pillInstances.Codigo.sync();
+            withStableScroll(() => applyFilters());
+        }
+        return;
+    }
+
+    const cellDoc = e.target.closest('.cell-docref');
+    if (cellDoc) {
+        const doc = (cellDoc.textContent || '').trim();
+        if (doc && doc !== '—') {
+            const set = new Set(state.DocRef);
+            if (set.has(doc)) set.delete(doc); else set.add(doc);
+            state.DocRef = [...set];
+            pillInstances.DocRef.sync();
             withStableScroll(() => applyFilters());
         }
         return;

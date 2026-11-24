@@ -25,7 +25,7 @@
             <div class="search-box">
                 <div class="search-input-wrap">
                     <i class="fa-solid fa-magnifying-glass"></i>
-                    <input id="q" class="search-input" placeholder="Buscar por nº reserva, código, descrição, cliente, consultor ou vendedor" />
+                    <input id="q" class="search-input" placeholder="Buscar por nº reserva, nº OS/orçamento, código, descrição, cliente ou consultor" />
                 </div>
                 <div class="file-input">
                     <button class="file-btn"><i class="fa-solid fa-file-excel"></i> Selecionar arquivo</button>
@@ -33,7 +33,10 @@
                 </div>
                 <span id="fileName" class="file-name"></span>
             </div>
-            <button id="clearAll" class="clear-btn"><i class="fa-solid fa-eraser"></i> Limpar Filtros</button>
+            <div class="controls-actions">
+                <button id="clearAll" class="clear-btn"><i class="fa-solid fa-eraser"></i> Limpar Filtros</button>
+                <button id="exportExcelTopBtn" class="export-btn" title="Exportar reservas filtradas para Excel"><i class="fa-solid fa-file-excel"></i> Extrair para Excel</button>
+            </div>
         </div>
 
         <div class="filters" id="filters"></div>
@@ -83,6 +86,7 @@
                     <thead>
                         <tr>
                             <th class="sortable" data-key="NumReserva" data-type="text">Nº Reserva <i class="fa-solid fa-sort sort"></i></th>
+                            <th class="sortable" data-key="DocRef" data-type="text">Nº OS / Orçamento <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="DataReserva" data-type="text">Data da Reserva <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Cliente" data-type="text">Cliente <i class="fa-solid fa-sort sort"></i></th>
                             <th class="sortable" data-key="Consultor" data-type="text">Consultor <i class="fa-solid fa-sort sort"></i></th>
